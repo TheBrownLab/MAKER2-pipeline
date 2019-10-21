@@ -14,7 +14,8 @@ import makerFunctions as Funcs
 import makerSettings as Sets
 
 
-def main():
+if __name__ == '__main__':
+
     pass_num = int(sys.argv[1])
     threads = int(sys.argv[2])
 

@@ -4,8 +4,9 @@
 #
 # example: maker_run.py 2 10
 ########################################################################################################################
+import argparse
 import os
-import sys
+import re
 import shutil
 import subprocess
 
@@ -154,7 +155,7 @@ def get_aug_species(i, pass_num):
     return species
 
 
-def run_genemark():
+def run_genemark(threads):
     my_paths = Paths(pass_num=1)
     make_dir(my_paths.gm_dir)
     os.chdir(my_paths.gm_dir)
@@ -162,7 +163,7 @@ def run_genemark():
     cmd = f'''\
         conda activate genemark_es
         
-        gmes_petap.pl --ES --min_contig 10000 --cores 20 --sequence {my_paths.genome_path} \
+        gmes_petap.pl --ES --min_contig 10000 --cores {threads} --sequence {my_paths.genome_path} \
         '''
     bash_command(cmd)
 
@@ -182,7 +183,7 @@ def run_snap():
     bash_command(cmd)
 
 
-def run_tran_busco():
+def run_tran_busco(threads):
     # BUSCO run after passes 1 and 2
     # Trains AUGUSTUS
     make_dir(new_paths.busco_dir)
@@ -201,7 +202,7 @@ def run_tran_busco():
     bash_command(cmd)
 
 
-def run_prot_busco():
+def run_prot_busco(threads):
     # Final BUSCO run (likely needs to change to pass_num == 3)
     # fourth pass through maker likely not necesarry
     # Does NOT train AUGUSTUS
@@ -218,23 +219,23 @@ def run_prot_busco():
     bash_command(cmd)
 
 
-def run_maker(new_paths):
+def run_maker(paths, threads):
     # Job Script
     # Runs maker followed by BUSCO and Snap
     # only trains Snap after passes 1 and 2
     # BUSCO only trains AUGUSTUS after passes 1 and 2
     cmd = f'''\
-        cd {new_paths.maker_dir}
+        cd {paths.maker_dir}
         maker -c {threads - 1} -fix_nucleotides maker_opts_edit.ctl maker_bopts.ctl mod_maker_exe.ctl
 
-        cd {new_paths.maker_out}
-        fasta_merge -d {new_paths.maker_log}
-        gff3_merge -d {new_paths.maker_log}                            
+        cd {paths.maker_out}
+        fasta_merge -d {paths.maker_log}
+        gff3_merge -d {paths.maker_log}                            
         '''
     bash_command(cmd)
 
 
-def maker_ctl():
+def maker_ctl(pass_num):
     # Create the 3 MAKER2 .ctl files
     my_exes.maker(arg='-CTL')
     with open('mod_maker_exe.ctl', 'w') as new_exe_file, open('maker_exe.ctl', 'r') as exe_file:
@@ -256,39 +257,39 @@ def maker_ctl():
 
             if line_begin == 'genome':
                 line = f'{line_begin}={old_paths.genome_path} #{line_end}'
-            elif line_begin == 'est_pass' and mypass < 4:
+            elif line_begin == 'est_pass' and pass_num < 4:
                 line = f'{line_begin}=1 #{line_end}'
-            elif line_begin == 'est2genome' and mypass == 1:
+            elif line_begin == 'est2genome' and pass_num == 1:
                 line = f'{line_begin}=1 #{line_end}'
             # elif line_begin == 'protein2genome' and pass_num == 1:
             #     line = f'{line_begin}=1 #{line_end}'
-            elif line_begin == 'keep_preds' and mypass == 1:
+            elif line_begin == 'keep_preds' and pass_num == 1:
                 line = f'{line_begin}=1 #{line_end}'
-            elif line_begin == 'single_exon' and mypass == 1:
+            elif line_begin == 'single_exon' and pass_num == 1:
                 line = f'{line_begin}=1 #{line_end}'
             # elif line_begin == 'est' and pass_num < 4:
             #     line = f'{line_begin}={old_paths.rna_seq} #{line_end}'
-            elif line_begin == 'altest' and mypass < 4:
+            elif line_begin == 'altest' and pass_num < 4:
                 line = f'{line_begin}={old_paths.rna_seq} #{line_end}'
-            elif line_begin == 'rmlib' and mypass < 4:
+            elif line_begin == 'rmlib' and pass_num < 4:
                 line = f'{line_begin}={old_paths.rep_mod_out} #{line_end}'
-            elif line_begin == 'gmhmm' and mypass < 4:
+            elif line_begin == 'gmhmm' and pass_num < 4:
                 line = f'{line_begin}={old_paths.gm_hmm} #{line_end}'
-            elif line_begin == 'maker_gff' and 1 < mypass < 4:
+            elif line_begin == 'maker_gff' and 1 < pass_num < 4:
                 line = f'{line_begin}={old_paths.maker_all_gff} #{line_end}'
-            elif line_begin == 'snaphmm' and 1 < mypass < 4:
+            elif line_begin == 'snaphmm' and 1 < pass_num < 4:
                 line = f'{line_begin}={old_paths.snap_hmm} #{line_end}'
-            elif line_begin == 'augustus_species' and 1 < mypass < 4:
+            elif line_begin == 'augustus_species' and 1 < pass_num < 4:
                 line = f'{line_begin}={old_paths.base_name} #{line_end}'
-            elif line_begin == 'pred_gff' and mypass == 4:
+            elif line_begin == 'pred_gff' and pass_num == 4:
                 line = f'{line_begin}={old_paths.maker_all_gff} #{line_end}'
-            elif line_begin == 'keep_preds' and mypass == 4:
+            elif line_begin == 'keep_preds' and pass_num == 4:
                 line = f'{line_begin}=1 #{line_end}'
-            elif line_begin == 'model_org' and mypass == 4:
+            elif line_begin == 'model_org' and pass_num == 4:
                 line = f'{line_begin}= #{line_end}'
-            elif line_begin == 'rmlib' and mypass == 4:
+            elif line_begin == 'rmlib' and pass_num == 4:
                 line = f'{line_begin}= #{line_end}'
-            elif line_begin == 'repeat_protein' and mypass == 4:
+            elif line_begin == 'repeat_protein' and pass_num == 4:
                 line = f'{line_begin}= #{line_end}'
 
             new_opt_file.write(line + '\n')
@@ -333,31 +334,33 @@ def sumamry():
 
 if __name__ == '__main__':
 
-    mypass = int(sys.argv[1])
-    threads = int(sys.argv[2])
+    parser = argparse.ArgumentParser(description='Script for running MAKER2 Pipeline.',
+                                     usage="maker_run.py -p PASSAGE -t THREADS")
+    parser.add_argument('-t', '--threads', type=int, default=1,
+                        help='Number of threads, default:1')
+    parser.add_argument('-p', '--passage', type=int, required=True,
+                        help='Passage number through MAKER2 pipeline (i.e. 1, 2, or 3')
+    args = parser.parse_args()
 
-    new_paths = Paths(pass_num=mypass)
-    old_paths = Paths(pass_num=(mypass - 1))
+    new_paths = Paths(pass_num=args.passage)
+    old_paths = Paths(pass_num=(args.passage - 1))
     my_exes = Executables()
 
     # Makes MAKER directory and cd's to it
     make_dir(new_paths.maker_dir)
     os.chdir(new_paths.maker_dir)
 
-    maker_ctl()
+    maker_ctl(pass_num=args.passage)
 
-    get_aug_species(mypass - 1)
-    run_maker(new_paths=new_paths)
+    get_aug_species(pass_num=args.passage - 1)
+    run_maker(paths=new_paths, threads=args.threads)
 
-    if mypass < 3:
+    if args.passage < 3:
         run_snap()
 
-        run_tran_busco()
+        run_tran_busco(threads=args.threads)
 
-    if mypass == 3:
-        run_prot_busco()
+    if args.passage == 3:
+        run_prot_busco(threads=args.threads)
 
-
-
-main()
 

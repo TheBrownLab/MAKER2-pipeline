@@ -235,18 +235,33 @@ def run_maker(paths, threads):
     bash_command(cmd)
 
 
-def maker_ctl(pass_num):
-    # Create the 3 MAKER2 .ctl files
-    my_exes.maker(arg='-CTL')
+def mod_maker_exe():
     with open('mod_maker_exe.ctl', 'w') as new_exe_file, open('maker_exe.ctl', 'r') as exe_file:
         for line in exe_file:
             line = line.strip()
             if line.split('=')[0] == 'RepeatMasker':
                 line = line.split('=')[0] + '=' + my_exes.rep_mask_exe + ' #' + line.split('#')[1]
             new_exe_file.write(line + '\n')
-    # Edit maker_opts.ctl - This file contatins the options for the maker run. Add more elif's if you want to add
-    # more options
+
+
+def maker_ctl(pass_num, est_alt):
+    # Create the 3 MAKER2 .ctl files
+    my_exes.maker(arg='-CTL')
+    mod_maker_exe()
+
+    # Edit maker_opts.ctl - This file contatins the options for the maker run.
     with open(f'maker_opts_edit.ctl', 'w') as new_opt_file, open('maker_opts.ctl', 'r') as opt_file:
+        if est_alt is False:
+            est_key = 'est'
+        elif est_alt is True:
+            est_key = 'altest'
+
+        all_passes = {'genome': old_paths.genome_path, 'est_pass': 1, 'rmlib': old_paths.rep_mod_out,
+                      'gmhmm': old_paths.gm_hmm, est_key: old_paths.rna_seq}
+        pass_1_key = {'est2genome': 1, 'protein2genome': 1, 'keep_preds': 1, 'single_exon': 1}
+        pass_2_key = {'maker_gff': old_paths.maker_all_gff, 'snaphmm': old_paths.snap_hmm,
+                      'augustus_species': old_paths.base_name}
+
         for line in opt_file:
             line = line.strip()
             line_begin = line.split('=')[0]
@@ -255,44 +270,15 @@ def maker_ctl(pass_num):
             except IndexError:
                 pass
 
-            if line_begin == 'genome':
-                line = f'{line_begin}={old_paths.genome_path} #{line_end}'
-            elif line_begin == 'est_pass' and pass_num < 4:
-                line = f'{line_begin}=1 #{line_end}'
-            elif line_begin == 'est2genome' and pass_num == 1:
-                line = f'{line_begin}=1 #{line_end}'
-            # elif line_begin == 'protein2genome' and pass_num == 1:
-            #     line = f'{line_begin}=1 #{line_end}'
-            elif line_begin == 'keep_preds' and pass_num == 1:
-                line = f'{line_begin}=1 #{line_end}'
-            elif line_begin == 'single_exon' and pass_num == 1:
-                line = f'{line_begin}=1 #{line_end}'
-            # elif line_begin == 'est' and pass_num < 4:
-            #     line = f'{line_begin}={old_paths.rna_seq} #{line_end}'
-            elif line_begin == 'altest' and pass_num < 4:
-                line = f'{line_begin}={old_paths.rna_seq} #{line_end}'
-            elif line_begin == 'rmlib' and pass_num < 4:
-                line = f'{line_begin}={old_paths.rep_mod_out} #{line_end}'
-            elif line_begin == 'gmhmm' and pass_num < 4:
-                line = f'{line_begin}={old_paths.gm_hmm} #{line_end}'
-            elif line_begin == 'maker_gff' and 1 < pass_num < 4:
-                line = f'{line_begin}={old_paths.maker_all_gff} #{line_end}'
-            elif line_begin == 'snaphmm' and 1 < pass_num < 4:
-                line = f'{line_begin}={old_paths.snap_hmm} #{line_end}'
-            elif line_begin == 'augustus_species' and 1 < pass_num < 4:
-                line = f'{line_begin}={old_paths.base_name} #{line_end}'
-            elif line_begin == 'pred_gff' and pass_num == 4:
-                line = f'{line_begin}={old_paths.maker_all_gff} #{line_end}'
-            elif line_begin == 'keep_preds' and pass_num == 4:
-                line = f'{line_begin}=1 #{line_end}'
-            elif line_begin == 'model_org' and pass_num == 4:
-                line = f'{line_begin}= #{line_end}'
-            elif line_begin == 'rmlib' and pass_num == 4:
-                line = f'{line_begin}= #{line_end}'
-            elif line_begin == 'repeat_protein' and pass_num == 4:
-                line = f'{line_begin}= #{line_end}'
+            if line_begin in all_passes.keys():
+                line = f'{line_begin}={all_passes[line_begin]} #{line_end}'
+            elif line_begin in pass_1_key.keys() and pass_num == 1:
+                line = f'{line_begin}={pass_1_key[line_begin]} #{line_end}'
+            elif line_begin in pass_1_key.keys() and pass_num == 2:
+                line = f'{line_begin}={pass_2_key[line_begin]} #{line_end}'
 
             new_opt_file.write(line + '\n')
+
     # Removes orginal, unedited maker_opts.ctl and maker_exe.ctl
     os.remove('maker_opts.ctl')
     os.remove('maker_exe.ctl')
@@ -333,7 +319,6 @@ def sumamry():
 
 
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser(description='Script for running MAKER2 Pipeline.',
                                      usage="maker_run.py -p PASSAGE -t THREADS")
     parser.add_argument('-t', '--threads', type=int, default=1,

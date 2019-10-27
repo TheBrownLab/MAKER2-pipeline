@@ -14,7 +14,6 @@ import subprocess
 class Paths:
     def __init__(self, pass_num):
         # i = iteration; p = Pass Number
-
         self.base = '/mnt/scratch/brownlab/rej110/AcanthamoebaGenomes/Maker_alt_EST/ref10'
 
         # Info about genome here
@@ -69,7 +68,6 @@ class Executables:
         self.fasta_merge_exe = '/mnt/home/software/anaconda/anaconda2/bin/fasta_merge'
         self.gff3_merge_exe = '/mnt/home/software/anaconda/anaconda2/bin/gff3_merge'
         self.maker2zff_exe = '/mnt/home/software/anaconda/anaconda2/bin/maker2zff'
-        self.make_aug_model = '/mnt/home/rej110/Scripts/MakerPipeline/MakerPipeline/make_AugustusModel.py'
 
     # Functions to execute above executables
     # Do Not Modify
@@ -104,6 +102,7 @@ def gen_repmod_blastdb(exes, my_paths, i):
 
     # Use absolute path to BuildDatabase executable. Change if not run on lugh.
     exes.build_db(arg=f'-name db{i} {my_paths.genome_path}')
+
 
 
 def make_dir(dir_path):
@@ -220,10 +219,14 @@ def run_prot_busco(threads):
 
 
 def run_maker(paths, threads):
-    # Job Script
-    # Runs maker followed by BUSCO and Snap
-    # only trains Snap after passes 1 and 2
-    # BUSCO only trains AUGUSTUS after passes 1 and 2
+    # Makes MAKER directory and cd's to it
+    make_dir(new_paths.maker_dir)
+    os.chdir(new_paths.maker_dir)
+
+    # Generates and edits MAKER ctl files
+    maker_ctl()
+
+    # Runs Maker
     cmd = f'''\
         cd {paths.maker_dir}
         maker -c {threads - 1} -fix_nucleotides maker_opts_edit.ctl maker_bopts.ctl mod_maker_exe.ctl
@@ -323,19 +326,15 @@ if __name__ == '__main__':
                                      usage="maker_run.py -p PASSAGE -t THREADS")
     parser.add_argument('-t', '--threads', type=int, default=1,
                         help='Number of threads, default:1')
-    parser.add_argument('-p', '--passage', type=int, required=True,
-                        help='Passage number through MAKER2 pipeline (i.e. 1, 2, or 3')
+    parser.add_argument('-p', '--passage', type=int, default=1,
+                        help='Passage number through MAKER2 pipeline (i.e. 1, 2, or 3)')
+    parser.add_argument('-e', '--est_alt', type=bool, default=False,
+                        help='Passage number through MAKER2 pipeline (i.e. 1, 2, or 3)')
     args = parser.parse_args()
 
     new_paths = Paths(pass_num=args.passage)
     old_paths = Paths(pass_num=(args.passage - 1))
     my_exes = Executables()
-
-    # Makes MAKER directory and cd's to it
-    make_dir(new_paths.maker_dir)
-    os.chdir(new_paths.maker_dir)
-
-    maker_ctl(pass_num=args.passage)
 
     get_aug_species(pass_num=args.passage - 1)
     run_maker(paths=new_paths, threads=args.threads)

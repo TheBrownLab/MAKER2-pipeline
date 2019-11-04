@@ -1,13 +1,14 @@
 # myMAKER2-Pipeline
 
 ## 1. Installation
-##### 1.1 Install Conda
-* Install Conda via Miniconda or Anaconda: \
-https://docs.conda.io/projects/conda/en/latest/user-guide/install/
-* Prepare conda virtual enviornment: \
-`conda env create -f maker_env.yml`
-* Activate maker environment: \
-`conda activate maker`
+##### 1.1 Install Dependencies 
+* RepeatModeler
+* RepeatMasker
+* MAKER2
+* GenemarkES
+* Augustus
+* SNAP
+* BUSCO
 ##### 1.2  Install myMAKER2-Pipeline
 * Download from GitHub: \
 `wget https://github.com/rej110/myMAKER2-Pipeline.git` 
@@ -18,14 +19,45 @@ https://docs.conda.io/projects/conda/en/latest/user-guide/install/
     * Name genome as `**orgname**.genome.fas`
     * Name est data as `**orgname**.est.fas`
     * Name protein homology data as `**orgname**.protein.fas`
-        * Where `**orgname**` is the name of the organism
-        * See `example/data/` to see where and how data files should be placed and named.
+* Where `**orgname**` is the name of the organism. This will be different if est and protein data originates from alternate organism
+* See `example/data/` to see where and how data files should be placed and named.
 
 ##### 2.2 Command Line
 * `python3 maker_run.py [options]`
     * `-p PASSAGE, --passage PASSAGE` : Passage number through MAKER2 pipeline (i.e. 1, 2, or 3), default:1
     * `-t THREADS, --threads THREADS` : Number of threads, default:1
-    * `-e, --est_alt` : est and protein homology data dervived from an alternate organims
+    * `-a, --alt_est` : If est and protein homology data come from an alternate organims, default:False
 
+##### 2.3 Work Flow
+* Pass 1 - Evidence based predicitons only
+    * Receives:
+        * EST data
+        * Protein homology data
+        
+* Pass 2 - _Ab initio_ predictions only.
+    * Receives:
+        * GeneMarkES Training
+        * SNAP Training
+        * Augustus Species 
+    * Augustus and Snap trained from Pass 1 gene model
+    * GeneMark self-trained
+ 
+* Pass 3 - _Ab initio_ predictions only.
+    * Receives:
+            * GeneMarkES Training
+            * SNAP Training
+            * Augustus Species 
+    * Augustus and Snap trained from Pass 2 gene model
+    * GeneMark self-trained
+    
+* Pass 4 - Evidence based and _Ab initio_ predictions
+    * Receives:
+        * GeneMarkES Training
+        * SNAP Training
+        * Augustus Species
+        * est data
+        * Protein homology data
+    * Augustus and Snap trained from Pass 3 gene model
+    * GeneMark self-trained
 
 ### References

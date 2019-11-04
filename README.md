@@ -33,31 +33,31 @@
     * Receives:
         * EST data
         * Protein homology data
+
         
 * Pass 2 - _Ab initio_ predictions only.
     * Receives:
         * GeneMarkES Training
         * SNAP Training
         * Augustus Species 
-    * Augustus and Snap trained from Pass 1 gene model
-    * GeneMark self-trained
+
  
 * Pass 3 - _Ab initio_ predictions only.
     * Receives:
-            * GeneMarkES Training
-            * SNAP Training
-            * Augustus Species 
-    * Augustus and Snap trained from Pass 2 gene model
-    * GeneMark self-trained
+        * GeneMarkES Training
+        * SNAP Training
+        * Augustus Species 
+    
     
 * Pass 4 - Evidence based and _Ab initio_ predictions
     * Receives:
         * GeneMarkES Training
         * SNAP Training
         * Augustus Species
-        * est data
+        * EST data
         * Protein homology data
-    * Augustus and Snap trained from Pass 3 gene model
-    * GeneMark self-trained
 
+
+SNAP and Augustus are retrained between passes\
+GeneMarkES is self trained
 ### References

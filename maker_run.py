@@ -1,7 +1,11 @@
 ########################################################################################################################
-# Robert Jones (rej110@msstate.edu)
-# usage: maker_run.py [options]
-#        run maker_run.py -h for options
+# Robert E. Jones (rej110@msstate.edu)
+# GitHub Repo: https://github.com/rej110/myMAKER2-Pipeline
+# usage:   maker_run.py [options]
+#          run maker_run.py -h for options
+# Details: This is a pipeline that automates the usage of the MAKER2 pipeline.
+#          It runs RepeatModeler first followed by 4 rounds of MAKER2. This pipeline also trains ab initio gene
+#          predictors and runs BUSCO between passes of MAKER.
 ########################################################################################################################
 import os
 import re
@@ -67,16 +71,16 @@ def execute(cmd):
     subprocess.run(cmd, shell=True, executable='/bin/bash')
 
 
-def run_rep_mod(threads, new):
-    make_dir(new.rep_mod_db)
-    os.chdir(new.rep_mod_db)
+def run_rep_mod(threads, paths):
+    make_dir(paths.rep_mod_db)
+    os.chdir(paths.rep_mod_db)
 
-    shutil.copyfile(new.genome, f'./{new.base_name}.db.fas')
+    shutil.copyfile(paths.genome, f'./{paths.base_name}.db.fas')
 
     cmd = f'''
     module load RepeatModeler/1.0.11
-    BuildDatabase -name {new.base_name}.db ./{new.base_name}.db.fas
-    RepeatModeler -pa {threads - 1} -database {new.base_name}.db
+    BuildDatabase -name {paths.base_name}.db ./{paths.base_name}.db.fas
+    RepeatModeler -pa {threads - 1} -database {paths.base_name}.db
     module unload RepeatModeler/1.0.11
     '''
     execute(cmd)
@@ -90,11 +94,10 @@ def make_dir(dir_path):
         os.mkdir(dir_path)
 
 
-def get_aug_species(new):
-
-    busco_path = new.busco_dir
-    aug_config = new.aug_config_path
-    species = new.base_name
+def get_aug_species(paths):
+    busco_path = paths.busco_dir
+    aug_config = paths.aug_config_path
+    species = paths.base_name
 
     make_dir(f'{aug_config}/species/{species}')
     print(f'{aug_config}/species/{species}')
@@ -105,7 +108,6 @@ def get_aug_species(new):
 
     # r=root, d=directories, f = files
     for root, dirs, files in os.walk(busco_path):
-
         for file in files:
             for ending in endings:
                 new_file = f'{aug_config}/species/{species}/{species}{ending}'
@@ -142,42 +144,42 @@ def run_genemark(threads):
     execute(cmd)
 
 
-def run_snap(new):
+def run_snap(paths):
     # Commands to train SNAP
     # these lines go in the job script that follows if pass 1 or 2
-    make_dir(new.snap_dir)
-    os.chdir(new.snap_dir)
+    make_dir(paths.snap_dir)
+    os.chdir(paths.snap_dir)
 
     cmd = f'''
-    maker2zff {new.maker_all_gff}
+    maker2zff {paths.maker_all_gff}
     fathom -categorize 1000 genome.ann genome.dna
     fathom -export 1000 -plus uni.ann uni.dna
     forge export.ann export.dna
-    hmm-assembler.pl {new.base_name}_snap . > {new.base_name}_snap.hmm
+    hmm-assembler.pl {paths.base_name}_snap . > {paths.base_name}_snap.hmm
     '''
     execute(cmd)
 
 
-def run_busco(threads, new):
+def run_busco(threads, paths):
     # Final BUSCO run (likely needs to change to pass_num == 3)
     # fourth pass through maker likely not necesarry
     # Does NOT train AUGUSTUS
-    make_dir(new.busco_dir)
-    os.chdir(new.busco_dir)
+    make_dir(paths.busco_dir)
+    os.chdir(paths.busco_dir)
 
     cmd = f'''
-    export AUGUSTUS_CONFIG_PATH={new.aug_config_path}
+    export AUGUSTUS_CONFIG_PATH={paths.aug_config_path}
     run_BUSCO.py \\
-    -i {new.maker_prot}  \\
-    -l {new.busco_lineage} \\
-    -o {new.base_name}_prot \\
+    -i {paths.maker_prot}  \\
+    -l {paths.busco_lineage} \\
+    -o {paths.base_name}_prot \\
     -m proteins \\
     -c {threads}
     
     run_BUSCO.py \\
-    -i {new.maker_tran} \\
-    -l {new.busco_lineage} \\
-    -o {new.base_name}_tran  \\
+    -i {paths.maker_tran} \\
+    -l {paths.busco_lineage} \\
+    -o {paths.base_name}_tran  \\
     -m genome \\
      -c {threads} \\
     --long
@@ -275,8 +277,6 @@ def maker_ctl(pass_num, alt_est, old):
 
 
 def sumamry():
-    dirs = ['BUSCO_Pass1/PseudoContigs/oneContg.', 'BUSCO_Pass2/PseudoContigs/oneContg.', 'Final_BUSCO/']
-    base = '/mnt/scratch/brownlab/rej110/AcanthamoebaGenomes/MakerPipeline'
     error1 = []
     error2 = []
     error3 = []
@@ -309,13 +309,13 @@ def sumamry():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Script for running MAKER2 Pipeline.',
-                                     usage="maker_run.py -p PASSAGE -t THREADS")
+                                     usage="maker_run.py [OPTIONS]")
     parser.add_argument('-t', '--threads', type=int, default=1,
-                        help='Number of threads, default:1')
+                        help='Number of threads; default: 1')
     parser.add_argument('-p', '--passage', type=int, default=1,
-                        help='Passage through MAKER2 pipeline to start from (i.e. 1, 2, 3, or 4; default=1)')
+                        help='Passage through MAKER2 pipeline to start from (i.e. 1, 2, 3, or 4); default: 1')
     parser.add_argument('-a', '--alt_est', default=False, action='store_true',
-                        help='If est and protein data from an alternate organism')
+                        help='If est and protein data from an alternate organism; default: False')
     args = parser.parse_args()
     passage = args.passage
 
@@ -324,25 +324,35 @@ if __name__ == '__main__':
         old_paths = Paths(pass_num=(this_pass - 1))
 
         if this_pass == 1:
-            # run_genemark(threads=args.threads)
-            run_rep_mod(threads=args.threads, new=new_paths)
+            run_rep_mod(threads=args.threads, paths=new_paths)
             run_maker(threads=args.threads, pass_num=this_pass, alt_est=args.alt_est,
                       new=new_paths, old=old_paths)
-            run_snap(new=new_paths)
-            run_busco(threads=args.threads, new=new_paths)
-            get_aug_species(new=new_paths)
+
+            # Ab-initio training (GeneMarkES only self trained once)
+            run_genemark(threads=args.threads)
+            run_snap(paths=new_paths)
+            run_busco(threads=args.threads, paths=new_paths)
+            get_aug_species(paths=new_paths)
+
             os.chdir(new_paths.base)
 
         elif this_pass == 2 or this_pass == 3:
+            # TODO: Remove this call of run_genemark() and get_aug_species() after Acan genomes finish
+            run_genemark(threads=args.threads)
+            get_aug_species(paths=old_paths)
+
             run_maker(threads=args.threads, pass_num=this_pass, alt_est=args.alt_est,
                       new=new_paths, old=old_paths)
-            run_snap(new=new_paths)
-            run_busco(threads=args.threads, new=new_paths)
-            get_aug_species(new=new_paths)
+
+            # Ab-initio training
+            run_snap(paths=new_paths)
+            run_busco(threads=args.threads, paths=new_paths)
+            get_aug_species(paths=new_paths)
+
             os.chdir(new_paths.base)
 
         elif this_pass == 4:
             run_maker(threads=args.threads, pass_num=this_pass, alt_est=args.alt_est,
                       new=new_paths, old=old_paths)
-            run_busco(threads=args.threads, new=new_paths)
+            run_busco(threads=args.threads, paths=new_paths)
             os.chdir(new_paths.base)

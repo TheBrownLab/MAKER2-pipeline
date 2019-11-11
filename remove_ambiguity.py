@@ -1,6 +1,15 @@
+########################################################################################################################
+# Robert E. Jones (rej110@msstate.edu)
+# GitHub Repo: https://github.com/rej110/myMAKER2-Pipeline
+# usage:   maker_run.py -i PATH_TO_INFILE
+#          run remove_ambiguity.py -h for options
+# Details: Removes IUPAC amiguity codes from nucleotide sequences (in FASTA format) and replaces them with N.
+#          Some programs, such as RepeatModeler, cannot handle ambiguous nucleotides.
+########################################################################################################################
+import argparse
 from Bio import SeqIO
 from Bio.Seq import MutableSeq
-import argparse
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Removes IUPAC ambiguity codes and replaces them with N',

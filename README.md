@@ -24,7 +24,7 @@
 
 #### 2.2 Command Line
 * `python3 maker_run.py [options]`
-    * `-p PASSAGE, --passage PASSAGE` : Passage number through MAKER2 pipeline (i.e. 1, 2, or 3), default:1
+    * `-p PASSAGE, --passage PASSAGE` : Passage number through MAKER2 pipeline (i.e. 1, 2, 3, or 4), default:1
     * `-t THREADS, --threads THREADS` : Number of threads, default:1
     * `-a, --alt_est` : If est and protein homology data come from an alternate organims, default:False
 
@@ -32,9 +32,9 @@
 * All Passes
     * genome = _path to genome_
     * rm_lib = _path to RepeatModeler output_
-    * protein = _path to protein homology data_
-    * est = path to est data from same organism (blank if from alternate organism)
-    * altest = path to est data from alternate organism (blank if from same organism)
+    * protein = _path to protein homology data_ (can be from closely related organism)
+    * est = _path to est data from same organism_ (blank if from alternate organism)
+    * altest = _path to est data from alternate organism_ (blank if from same organism)
     
     
 * Passes 2, 3, & 4

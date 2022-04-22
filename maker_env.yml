@@ -18,7 +18,7 @@ dependencies:
   - boost=1.67.0=py27h3e44d54_0
   - boost-cpp=1.67.0=h3a22d5f_0
   - bowtie=1.2.2=py27h2d50403_1
-  - busco=3.0.2=py27_10
+  - busco=3.0.2
   - bwidget=1.9.11=1
   - bzip2=1.0.6=h14c3975_1002
   - ca-certificates=2019.9.11=hecc5488_0
@@ -381,7 +381,6 @@ dependencies:
   - r-mgcv=1.8_28=r351hcdcec82_0
   - r-munsell=0.5.0=r351h6115d3f_1001
   - r-nlme=3.1_140=r351h9bbef5b_0
-  - r-pillar=1.4.1=h6115d3f_0
   - r-pkgconfig=2.0.2=r351h6115d3f_1001
   - r-plyr=1.8.4=r351h29659fb_1002
   - r-r6=2.4.0=r351h6115d3f_0

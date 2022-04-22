@@ -12,6 +12,7 @@ import sys
 import shutil
 import argparse
 import subprocess
+from pathlib import Path
 
 
 class Paths:
@@ -20,18 +21,22 @@ class Paths:
 
     def __init__(self, pass_num):
         self.base = os.getcwd()
+        
         # Gets BaseName and paths to genome, est, and protein homology data
         self.base_name, self.genome, self.est, self.prot = self.get_data_paths()
 
+        # Sets pipeline dir
+        self.pipeline_dir = f'{self.base}/pipeline'
+
         # RepeatModeler
-        self.rep_mod_db = f'{self.base}/RepeatModeler'
+        self.rep_mod_db = f'{self.pipeline_dir}/RepeatModeler'
         self.rep_mod_out = f'{self.rep_mod_db}/{self.base_name}.db-families.fa'
         # GeneMarkES
-        self.gm_dir = f'{self.base}/GeneMarkES'
+        self.gm_dir = f'{self.pipeline_dir}/GeneMarkES'
         self.gm_hmm = f'{self.gm_dir}/output/gmhmm.mod'
 
         # Path of current Maker run
-        self.maker_dir = f'{self.base}/Maker_Pass{pass_num}'
+        self.maker_dir = f'{self.pipeline_dir}/Maker_Pass{pass_num}'
         self.maker_out = f'{self.maker_dir}/{self.base_name}.maker.output'
         self.maker_log = f'{self.maker_out}/{self.base_name}_master_datastore_index.log'
         self.maker_all_gff = f'{self.maker_out}/{self.base_name}.all.gff'
@@ -39,12 +44,13 @@ class Paths:
         self.maker_prot = f'{self.maker_out}/{self.base_name}.all.maker.proteins.fasta'
 
         # Path to SNAP training
-        self.snap_dir = f'{self.base}/Snap_Training{pass_num}'
+        self.snap_dir = f'{self.pipeline_dir}/Snap_Training{pass_num}'
         self.snap_hmm = f'{self.snap_dir}/{self.base_name}_snap.hmm'
 
         # Path to files for BUSCO/AugustusTraining
-            self.busco_lineage = f'/mnt/scratch/brownlab/rej110/.conda/envs/maker/eukaryota_odb9'
-        self.busco_dir = f'{self.base}/BUSCO_Pass{pass_num}/'
+        self.run_BUSCO = f'{os.path.dirname(os.path.abspath(__file__))}/run_BUSCO.py'
+        self.busco_lineage = f'/mnt/scratch/brownlab/rej110/.conda/envs/maker/eukaryota_odb9'
+        self.busco_dir = f'{self.pipeline_dir}/BUSCO_Pass{pass_num}/'
         self.aug_config_path = '/mnt/scratch/brownlab/rej110/.conda/envs/maker/config'
 
     def get_data_paths(self):
@@ -67,15 +73,17 @@ class Paths:
 
 
 def execute(cmd):
-    subprocess.run(cmd, shell=True, executable='/bin/bash')
+    p = subprocess.run(cmd, shell=True, executable='/bin/bash')
+    if p.returncode != 0:
+        raise Exception('subprocess exites with non-zero exit status')
 
 
 def make_dir(dir_path):
     try:
-        os.mkdir(dir_path)
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
     except FileExistsError:
         shutil.rmtree(dir_path)
-        os.mkdir(dir_path)
+        Path(dir_path).mkdir(parents=True, exist_ok=True)
 
 
 def run_rep_mod(threads, paths):
@@ -166,16 +174,18 @@ def run_busco(threads, paths):
     make_dir(paths.busco_dir)
     os.chdir(paths.busco_dir)
 
+    
+
     cmd = f'''
     export AUGUSTUS_CONFIG_PATH={paths.aug_config_path}
-    run_BUSCO.py \\
+    {paths.run_BUSCO} \\
     -i {paths.maker_prot}  \\
     -l {paths.busco_lineage} \\
     -o {paths.base_name}_prot \\
     -m proteins \\
     -c {threads}
     
-    run_BUSCO.py \\
+    {paths.run_BUSCO} \\
     -i {paths.maker_tran} \\
     -l {paths.busco_lineage} \\
     -o {paths.base_name}_tran  \\
@@ -292,7 +302,7 @@ if __name__ == '__main__':
         old_paths = Paths(pass_num=(this_pass - 1))
 
         if this_pass == 1:
-            # run_rep_mod(threads=args.threads, paths=new_paths)
+            run_rep_mod(threads=args.threads, paths=new_paths)
             run_maker(threads=args.threads, pass_num=this_pass, alt_est=args.alt_est,
                       new=new_paths, old=old_paths)
 

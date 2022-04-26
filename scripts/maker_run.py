@@ -14,11 +14,16 @@ import argparse
 import subprocess
 from pathlib import Path
 
+# System wide installed dependencies
+REPEAT_MASKER_EXE = '/mnt/home/software/sources/RepeatMasker/4-0-8/RepeatMasker'
+
+# Conda installed dependencies
+CONDA_ENV_DIR = '/mnt/scratch/brownlab/rej110/anaconda3/envs'
+GENEMARK_PROBUILD_EXE = f'{CONDA_ENV_DIR}/maker/bin/gmes_petap.pl'
+
+
 
 class Paths:
-    # Executables
-    rep_mask_exe = '/mnt/home/software/sources/RepeatMasker/4-0-8/RepeatMasker'
-
     def __init__(self, pass_num):
         self.base = os.getcwd()
         
@@ -65,10 +70,6 @@ class Paths:
                 elif filename.endswith('protein.fas'):
                     prot = os.path.join(root, filename)
 
-        # if base is None or genome is None or est is None or prot is None:
-        #     sys.exit('Data file(s) are missing')
-        # else:
-
         return base, genome, est, prot
 
 
@@ -93,6 +94,7 @@ def run_rep_mod(threads, paths):
     shutil.copyfile(paths.genome, f'./{paths.base_name}.db.fas')
 
     cmd = f'''
+    conda activate maker
     module load RepeatModeler/1.0.11
     BuildDatabase -name {paths.base_name}.db ./{paths.base_name}.db.fas
     RepeatModeler -pa {threads - 1} -database {paths.base_name}.db
@@ -146,6 +148,7 @@ def run_genemark(threads):
     os.chdir(my_paths.gm_dir)
 
     cmd = f'''
+    conda activate maker
     gmes_petap.pl --ES --min_contig 10000 --cores {threads} --sequence {my_paths.genome}
     '''
     execute(cmd)
@@ -158,6 +161,7 @@ def run_snap(paths):
     os.chdir(paths.snap_dir)
 
     cmd = f'''
+    conda activate maker
     maker2zff {paths.maker_all_gff}
     fathom -categorize 1000 genome.ann genome.dna
     fathom -export 1000 -plus uni.ann uni.dna
@@ -177,6 +181,7 @@ def run_busco(threads, paths):
     
 
     cmd = f'''
+    conda activate maker
     export AUGUSTUS_CONFIG_PATH={paths.aug_config_path}
     {paths.run_BUSCO} \\
     -i {paths.maker_prot}  \\
@@ -206,7 +211,8 @@ def run_maker(new, old, threads, pass_num, alt_est):
 
     # Runs Maker
     cmd = f'''
-    maker -c {threads - 1} -fix_nucleotides maker_opts_edit.ctl maker_bopts.ctl mod_maker_exe.ctl
+    conda activate maker
+    maker -c {threads - 1} -fix_nucleotides maker_opts.ctl maker_bopts.ctl maker_exe.ctl
     cd {new.maker_out}
     fasta_merge -d {new.maker_log}
     gff3_merge -d {new.maker_log}
@@ -216,73 +222,87 @@ def run_maker(new, old, threads, pass_num, alt_est):
 
 
 def mod_maker_exe(old):
-    with open('mod_maker_exe.ctl', 'w') as new_exe_file, open('maker_exe.ctl', 'r') as exe_file:
-        for line in exe_file:
-            line = line.strip()
-            if line.split('=')[0] == 'RepeatMasker':
-                line = line.split('=')[0] + '=' + old.rep_mask_exe + ' #' + line.split('#')[1]
-            new_exe_file.write(line + '\n')
-    os.remove('maker_exe.ctl')
-
-
-def maker_ctl(pass_num, alt_est, old):
-    # Create the 3 MAKER2 .ctl fils
-    cmd = 'maker -CTL'
-    execute(cmd)
-
-    mod_maker_exe(old=old)
-
-    # Sets paths to genome, est evidence, and protein homology evidence in maker ctl file.
-    # For the first pass of maker. Creates gene model needed to train SNAP and AUGUSTUS
-    all_passes = {'genome': old.genome, 'rmlib': old.rep_mod_out, 'protein': old.prot}
-    # Sets est evidence to est or altest depending if est evidence is from an alternate organism
-    if alt_est is False:
-        all_passes['est'] = old.est
-    elif alt_est is True:
-        all_passes['altest'] = old.est
-
-    # Sets paths to SNAP hmm, Genemark hmm, and the AUGUSTUS species model.
-    # For the "true passes" of maker. Passes 2, 3, and 4
-    pass_234_key = {'snaphmm': old.snap_hmm, 'gmhmm': old.gm_hmm, 'augustus_species': old.base_name,
-                    'maker_gff': old.maker_all_gff}
-
-    pass_1_key = {'est2genome': 1, 'protein2genome': 0, 'keep_preds': 0}
-    pass_23_key = {'est2genome': 0, 'protein2genome': 0, 'keep_preds': 0}
-    pass_4_key = {'est2genome': 0, 'protein2genome': 0, 'keep_preds': 1}
-
-    # Edit maker_opts.ctl - This file contatins the options for the maker run
-    with open(f'maker_opts_edit.ctl', 'w') as new_opt_file, open('maker_opts.ctl', 'r') as opt_file:
-        for line in opt_file:
-            line = line.strip()
-            line_begin = line.split('=')[0]
+    exe_dict = {
+        'RepeatMasker': REPEAT_MASKER_EXE,
+        'probuild': GENEMARK_PROBUILD_EXE
+    }
+    with open('maker_exe.ctl', 'r') as infile, open('tmp.ctl', 'w') as outfile:
+        for line in infile:
+            line_begin = line.strip().split('=')[0]
             try:
                 line_end = line.split('#')[1]
             except IndexError:
-                pass
+                continue
 
+            if line_begin in exe_dict.keys():
+                outfile.write(f'{line_begin}={exe_dict[line_begin]} #{line_end}\n')
+
+    os.rename('tmp.ctl', 'maker_exe.ctl')
+
+
+def maker_ctl(pass_num, alt_est, old):
+    # Create the 3 MAKER2 .ctl files
+    cmd = '''
+    conda activate maker
+    maker -CTL
+    '''
+    execute(cmd)
+
+    mod_maker_exe(old=old)
+    
+    # Initalizes data_dict
+    # data_dict wil get updated as needed depening on pass_num
+    data_dict = {
+        'genome': old.genome,
+        'rmlib': old.rep_mod_out,
+        'protein': old.prot,
+        'snaphmm': '',
+        'gmhmm': '',
+        'augustus_species': '',
+        'maker_gff': '',
+        'est2genome': 0,
+        'protein2genome': 0,
+        'keep_preds': 0
+        }
+    
+    # Sets est evidence to est or altest depending if est evidence is from an alternate organism
+    if alt_est is False:
+        data_dict['est'] = old.est
+    elif alt_est is True:
+        data_dict['altest'] = old.est
+
+    # Sets paths to SNAP hmm, Genemark hmm, and the AUGUSTUS species model.
+    # For the "true passes" of maker. Passes 2, 3, and 4
+    if pass_num in [2, 3, 4]:
+        data_dict['snaphmm'] = old.snap_hmm
+        data_dict['gmhmm'] = old.gm_hmm
+        data_dict['augustus_species'] = old.base_name
+        data_dict['maker_gff'] = old.maker_all_gff
+    
+    # Sets pass specific values
+    if pass_num == 1:
+        # sets est2genome and protein2genome depending on if that info is available
+        if old.est:
+            data_dict['est2genome'] = 1
+        if old.prot:
+            data_dict['protein2genome'] = 1
+    elif pass_num == 4:
+        data_dict['keep_preds'] = 1
+
+    # Edit maker_opts.ctl - This file contatins the options for the maker run
+    with open('maker_exe.ctl', 'r') as infile, open('tmp.ctl', 'w') as outfile:
+        for line in infile:
+            line_begin = line.strip().split('=')[0]
             try:
-                if line_begin in all_passes.keys():
-                    line = f'{line_begin}={all_passes[line_begin]} #{line_end}'
+                line_end = line.split('#')[1]
+            except IndexError:
+                continue
 
-                elif line_begin in pass_1_key.keys() and pass_num == 1:
-                    line = f'{line_begin}={pass_1_key[line_begin]} #{line_end}'
+            if line_begin in data_dict.keys():
+                outfile.write(f'{line_begin}={data_dict[line_begin]} #{line_end}\n')
 
-                elif line_begin in pass_234_key.keys() and (pass_num == 2 or pass_num == 3 or pass_num == 4):
-                    line = f'{line_begin}={pass_234_key[line_begin]} #{line_end}'
-
-                elif line_begin in pass_23_key.keys() and (pass_num == 2 or pass_num == 3):
-                    line = f'{line_begin}={pass_23_key[line_begin]} #{line_end}'
-
-                elif line_begin in pass_4_key.keys() and pass_num == 4:
-                    line = f'{line_begin}={pass_4_key[line_begin]} #{line_end}'
-
-            except KeyError:
-                pass
-
-            new_opt_file.write(line + '\n')
-
-    # Removes orginal, unedited maker_opts.ctl and maker_exe.ctl
-    os.remove('maker_opts.ctl')
+    # Removes original, unedited maker_opts.ctl
+    os.rename('tmp.ctl','maker_opts.ctl')
 
 
 if __name__ == '__main__':
@@ -297,13 +317,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
     passage = args.passage
 
-    for this_pass in range(passage, 5):
-        new_paths = Paths(pass_num=this_pass)
-        old_paths = Paths(pass_num=(this_pass - 1))
+    for pass_num in range(passage, 5):
+        new_paths = Paths(pass_num=pass_num)
+        old_paths = Paths(pass_num=(pass_num - 1))
 
-        if this_pass == 1:
+        if pass_num == 1:
             run_rep_mod(threads=args.threads, paths=new_paths)
-            run_maker(threads=args.threads, pass_num=this_pass, alt_est=args.alt_est,
+            run_maker(threads=args.threads, pass_num=pass_num, alt_est=args.alt_est,
                       new=new_paths, old=old_paths)
 
             # Ab-initio training (SNAP and Augustus)
@@ -315,8 +335,8 @@ if __name__ == '__main__':
 
             os.chdir(new_paths.base)
 
-        elif this_pass == 2 or this_pass == 3:
-            run_maker(threads=args.threads, pass_num=this_pass, alt_est=args.alt_est,
+        elif pass_num == 2 or pass_num == 3:
+            run_maker(threads=args.threads, pass_num=pass_num, alt_est=args.alt_est,
                       new=new_paths, old=old_paths)
 
             # Ab-initio training
@@ -326,8 +346,8 @@ if __name__ == '__main__':
 
             os.chdir(new_paths.base)
 
-        elif this_pass == 4:
-            run_maker(threads=args.threads, pass_num=this_pass, alt_est=args.alt_est,
+        elif pass_num == 4:
+            run_maker(threads=args.threads, pass_num=pass_num, alt_est=args.alt_est,
                       new=new_paths, old=old_paths)
             run_busco(threads=args.threads, paths=new_paths)
             os.chdir(new_paths.base)

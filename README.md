@@ -9,8 +9,10 @@
 * Augustus
 * SNAP
 * BUSCO
+##### 1.2  Install Databases
+* wget https://www.dfam.org/releases/Dfam_3.2/families/Dfam.h5.gz
 ##### 1.2  Install myMAKER2-Pipeline
-* Download from GitHub: \
+* Download from GitHub:
 
 
 ## 2. Usage

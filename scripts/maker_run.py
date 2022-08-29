@@ -14,13 +14,19 @@ import argparse
 import subprocess
 from pathlib import Path
 
+
+# TODO: Put into a config json
 # System wide installed dependencies
 REPEAT_MASKER_EXE = '/mnt/home/software/sources/RepeatMasker/4-0-8/RepeatMasker'
 
 # Conda installed dependencies
-CONDA_ENV_DIR = '/mnt/scratch/brownlab/rej110/anaconda3/envs'
-GENEMARK_PROBUILD_EXE = f'{CONDA_ENV_DIR}/maker/bin/gmes_petap.pl'
+CONDA_MAKER_ENV = '/mnt/scratch/brownlab/rej110/anaconda3/envs/maker'
+GENEMARK_PROBUILD_EXE = f'{CONDA_MAKER_ENV}/bin/gmes_petap.pl'
+RUN_BUSCO = f'{CONDA_MAKER_ENV}/bin/run_BUSCO.py'
 
+# database paths
+BUSCO_LINEAGE = '/mnt/scratch/brownlab/rej110/projects/myMAKER2-Pipeline/data_files/eukaryota_odb9'
+AUGUSTUS_CONFIG = f'{CONDA_MAKER_ENV}/config'
 
 
 class Paths:
@@ -53,10 +59,7 @@ class Paths:
         self.snap_hmm = f'{self.snap_dir}/{self.base_name}_snap.hmm'
 
         # Path to files for BUSCO/AugustusTraining
-        self.run_BUSCO = f'{os.path.dirname(os.path.abspath(__file__))}/run_BUSCO.py'
-        self.busco_lineage = f'/mnt/scratch/brownlab/rej110/.conda/envs/maker/eukaryota_odb9'
         self.busco_dir = f'{self.pipeline_dir}/BUSCO_Pass{pass_num}/'
-        self.aug_config_path = '/mnt/scratch/brownlab/rej110/.conda/envs/maker/config'
 
     def get_data_paths(self):
         base, genome, est, prot = '', '', '', ''
@@ -94,7 +97,6 @@ def run_rep_mod(threads, paths):
     shutil.copyfile(paths.genome, f'./{paths.base_name}.db.fas')
 
     cmd = f'''
-    conda activate maker
     module load RepeatModeler/1.0.11
     BuildDatabase -name {paths.base_name}.db ./{paths.base_name}.db.fas
     RepeatModeler -pa {threads - 1} -database {paths.base_name}.db
@@ -104,22 +106,28 @@ def run_rep_mod(threads, paths):
 
 
 def get_aug_species(paths):
-    busco_path = paths.busco_dir
-    aug_config = paths.aug_config_path
-    species = paths.base_name
+    aug_species = f'{AUGUSTUS_CONFIG}/species'
 
-    make_dir(f'{aug_config}/species/{species}')
-    print(f'{aug_config}/species/{species}')
+    make_dir(f'{aug_species}/{paths.base_name}')
+    print(f'{aug_species}/{paths.base_name}')
 
-    endings = ['_intron_probs.pbl', '_exon_probs.pbl', '_parameters.cfg.orig1', '_igenic_probs.pbl',
-               '_parameters.cfg',
-               '_weightmatrix.txt', '_metapars.cfg', '_metapars.utr.cfg', '_metapars.cgp.cfg']
+    endings = [
+        '_intron_probs.pbl',
+        '_exon_probs.pbl',
+        '_parameters.cfg.orig1',
+        '_igenic_probs.pbl',
+        '_parameters.cfg',
+        '_weightmatrix.txt',
+        '_metapars.cfg',
+        '_metapars.utr.cfg',
+        '_metapars.cgp.cfg'
+    ]
 
     # r=root, d=directories, f = files
-    for root, dirs, files in os.walk(busco_path):
+    for root, dirs, files in os.walk(paths.busco_dir):
         for file in files:
             for ending in endings:
-                new_file = f'{aug_config}/species/{species}/{species}{ending}'
+                new_file = f'{aug_species}/{paths.base_name}/{paths.base_name}{ending}'
 
                 if file.endswith(ending) is True:
                     file = os.path.join(root, file)
@@ -133,13 +141,11 @@ def get_aug_species(paths):
                         filedata = f.read()
                         f.close()
 
-                        newdata = filedata.replace(old_prefix, species)
+                        newdata = filedata.replace(old_prefix, paths.base_name)
 
                         f = open(new_file, 'w')
                         f.write(newdata)
                         f.close()
-
-    return species
 
 
 def run_genemark(threads):
@@ -148,7 +154,6 @@ def run_genemark(threads):
     os.chdir(my_paths.gm_dir)
 
     cmd = f'''
-    conda activate maker
     gmes_petap.pl --ES --min_contig 10000 --cores {threads} --sequence {my_paths.genome}
     '''
     execute(cmd)
@@ -160,15 +165,16 @@ def run_snap(paths):
     make_dir(paths.snap_dir)
     os.chdir(paths.snap_dir)
 
-    cmd = f'''
-    conda activate maker
-    maker2zff {paths.maker_all_gff}
-    fathom -categorize 1000 genome.ann genome.dna
-    fathom -export 1000 -plus uni.ann uni.dna
-    forge export.ann export.dna
-    hmm-assembler.pl {paths.base_name}_snap . > {paths.base_name}_snap.hmm
-    '''
-    execute(cmd)
+    cmds = [
+        f'maker2zff {paths.maker_all_gff}',
+        'fathom -categorize 1000 genome.ann genome.dna',
+        'fathom -export 1000 -plus uni.ann uni.dna',
+        'forge export.ann export.dna',
+        f'hmm-assembler.pl {paths.base_name}_snap . > {paths.base_name}_snap.hmm'
+    ]
+
+    for cmd in cmds:
+        execute(cmd)
 
 
 def run_busco(threads, paths):
@@ -178,21 +184,18 @@ def run_busco(threads, paths):
     make_dir(paths.busco_dir)
     os.chdir(paths.busco_dir)
 
-    
-
     cmd = f'''
-    conda activate maker
-    export AUGUSTUS_CONFIG_PATH={paths.aug_config_path}
-    {paths.run_BUSCO} \\
+    export AUGUSTUS_CONFIG_PATH={AUGUSTUS_CONFIG}
+    {RUN_BUSCO} \\
     -i {paths.maker_prot}  \\
-    -l {paths.busco_lineage} \\
+    -l {BUSCO_LINEAGE} \\
     -o {paths.base_name}_prot \\
     -m proteins \\
     -c {threads}
     
-    {paths.run_BUSCO} \\
+    {RUN_BUSCO} \\
     -i {paths.maker_tran} \\
-    -l {paths.busco_lineage} \\
+    -l {BUSCO_LINEAGE} \\
     -o {paths.base_name}_tran  \\
     -m genome \\
      -c {threads} \\
@@ -211,7 +214,6 @@ def run_maker(new, old, threads, pass_num, alt_est):
 
     # Runs Maker
     cmd = f'''
-    conda activate maker
     maker -c {threads - 1} -fix_nucleotides maker_opts.ctl maker_bopts.ctl maker_exe.ctl
     cd {new.maker_out}
     fasta_merge -d {new.maker_log}
@@ -224,7 +226,7 @@ def run_maker(new, old, threads, pass_num, alt_est):
 def mod_maker_exe(old):
     exe_dict = {
         'RepeatMasker': REPEAT_MASKER_EXE,
-        'probuild': GENEMARK_PROBUILD_EXE
+        # 'probuild': GENEMARK_PROBUILD_EXE
     }
     with open('maker_exe.ctl', 'r') as infile, open('tmp.ctl', 'w') as outfile:
         for line in infile:
@@ -235,19 +237,17 @@ def mod_maker_exe(old):
                 continue
 
             if line_begin in exe_dict.keys():
-                outfile.write(f'{line_begin}={exe_dict[line_begin]} #{line_end}\n')
+                outfile.write(f'{line_begin}={exe_dict[line_begin]} #{line_end}')
+            else:
+                outfile.write(line)
 
     os.rename('tmp.ctl', 'maker_exe.ctl')
 
 
 def maker_ctl(pass_num, alt_est, old):
     # Create the 3 MAKER2 .ctl files
-    cmd = '''
-    conda activate maker
-    maker -CTL
-    '''
+    cmd = 'maker -CTL'
     execute(cmd)
-
     mod_maker_exe(old=old)
     
     # Initalizes data_dict
@@ -290,7 +290,7 @@ def maker_ctl(pass_num, alt_est, old):
         data_dict['keep_preds'] = 1
 
     # Edit maker_opts.ctl - This file contatins the options for the maker run
-    with open('maker_exe.ctl', 'r') as infile, open('tmp.ctl', 'w') as outfile:
+    with open('maker_opts.ctl', 'r') as infile, open('tmp.ctl', 'w') as outfile:
         for line in infile:
             line_begin = line.strip().split('=')[0]
             try:
@@ -299,7 +299,9 @@ def maker_ctl(pass_num, alt_est, old):
                 continue
 
             if line_begin in data_dict.keys():
-                outfile.write(f'{line_begin}={data_dict[line_begin]} #{line_end}\n')
+                outfile.write(f'{line_begin}={data_dict[line_begin]} #{line_end}')
+            else:
+                outfile.write(line)
 
     # Removes original, unedited maker_opts.ctl
     os.rename('tmp.ctl','maker_opts.ctl')

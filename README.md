@@ -1,4 +1,6 @@
-# myMAKER2-Pipeline
+# MAKER2 Pipeline
+
+For Snakemake implementation of the MAKER2 pipeline, see [MAKER2-snakemake](https://github.com/TheBrownLab/MAKER2-snakemake.git)
 
 ## 1. Installation
 ##### 1.1 Install Dependencies 
